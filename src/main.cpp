@@ -1,29 +1,93 @@
 #define UNICODE
 #define _UNICODE
-#include <iostream>
-#include <memory>
 #include <windows.h>
 
-
-
-int main()
+BOOL CreateAndVerifyReason(HWND hWnd, LPCWSTR pwszReason)
 {
-  wchar_t pname[256];
-  DWORD dwSize = 256;
+    BOOL fSuccess = FALSE;
+    DWORD cch = 0;
 
-  DWORD dwNeeded, dwReturned;
-  PRINTER_INFO_5W* pinfo;
+    // Register a blocking reason for the window.
+    ShutdownBlockReasonCreate(hWnd, pwszReason);
 
-  GetDefaultPrinterW(pname, &dwSize);
+    // Verify that the registration went through.
+    // Query the length first.
+    if (ShutdownBlockReasonQuery(hWnd, NULL, &cch))
+    {
+        // Allocate memory space to retrive the string.
+        WCHAR *pch = new WCHAR[cch];
+        if (NULL != pch)
+        {
+            // Get the string and compare.
+            if (ShutdownBlockReasonQuery(hWnd, pch, &cch))
+            {
+                fSuccess = (0 == lstrcmpW(pwszReason, pch));
+            }
 
-  std::wstring default_printer(pname, dwSize);
-  std::wcout << "Default printer is" << default_printer << std::endl;
+            delete[] pch;
+        }
+    }
 
-  // EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, NULL, 5, NULL, 0, &dwNeeded, &dwReturned);
+    return fSuccess;
+}
 
-  pinfo = (PRINTER_INFO_5W*)malloc(dwNeeded);
+LRESULT CALLBACK WndProc(HWND hWnd, UINT nMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch (nMsg)
+    {
+    case WM_QUERYENDSESSION:
+        if (!CreateAndVerifyReason(hWnd, L"You have unsaved data."))
+        {
+            // Handle the error here.
+        }
 
-  EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, NULL, 5, (PBYTE)pinfo, dwNeeded, &dwNeeded, &dwReturned);
+        // Tell the system we like to block the shutdown.
+        return FALSE;
 
-  return 0;
+    case WM_DESTROY:
+        // Unregister the reason string.
+        ShutdownBlockReasonDestroy(hWnd);
+
+        // Stop the message pump.
+        PostQuitMessage(0);
+        break;
+    }
+
+    return DefWindowProc(hWnd, nMsg, wParam, lParam);
+}
+
+int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR lpCmdLine, int nCmdShow)
+{
+    WNDCLASSEX wcex = {0};
+    HWND hWnd;
+    MSG msg;
+
+    // Register a window class and create a window from it.
+    wcex.cbSize = sizeof(wcex);
+    wcex.style = CS_GLOBALCLASS;
+    wcex.hInstance = hInst;
+    wcex.hCursor = LoadCursor(NULL, (LPTSTR)IDC_ARROW);
+    wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wcex.lpszClassName = TEXT("Sample Class");
+    wcex.lpfnWndProc = WndProc;
+
+    if (RegisterClassEx(&wcex))
+    {
+        hWnd = CreateWindow(TEXT("Sample Class"), TEXT("Sample Program"),
+                            WS_OVERLAPPEDWINDOW,
+                            CW_USEDEFAULT, CW_USEDEFAULT, 400, 200,
+                            NULL, NULL, NULL, NULL);
+        if (NULL != hWnd)
+        {
+            ShowWindow(hWnd, nCmdShow);
+
+            // Run the message pump.
+            while (GetMessage(&msg, NULL, 0, 0))
+            {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
+    }
+    return 0;
 }

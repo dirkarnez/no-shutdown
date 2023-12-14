@@ -2,6 +2,7 @@
     "recommendations": [
         "ms-vscode.cmake-tools",
         "github.vscode-github-actions",
-        "ms-vscode.cpptools"
+        "ms-vscode.cpptools",
+        "franneck94.c-cpp-runner"
     ]
 }
